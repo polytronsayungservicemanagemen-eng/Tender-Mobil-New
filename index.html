@@ -180,6 +180,9 @@
 
 <script>
 const SHEET_WEBHOOK_URL = 'https://script.google.com/macros/s/AKfycbxnlMSilG4AzZx4qOMv6CGoglRV5Ke2Nk_S1qOeC5x0AzKW9ZFuNQ8jmMUeRGOIw7Bo4A/exec';
+const SHEET_ID = '16NUTsW0vzXfl0HxZ3C-b9_xw2UXrHk_tDppJW99wXfk';
+const SHEET_NAME = 'Sheet1';
+const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(SHEET_NAME)}&t=`;
 
 let bids = [];     // {name, amount} dari server (nama asli, akan disamarkan saat ditampilkan)
 let ready = false;
@@ -229,9 +232,24 @@ async function loadBids(){
   dot.classList.remove('error');
   text.textContent = 'Menyinkronkan...';
   try{
-    const res = await fetch(SHEET_WEBHOOK_URL, { method: 'GET' });
-    const data = await res.json();
-    bids = data.bids || [];
+    // Membaca langsung dari Google Sheets via Google Visualization API
+    // (docs.google.com) -- tidak melalui script.googleusercontent.com
+    // yang sering diblokir oleh sebagian ISP di Indonesia.
+    const res = await fetch(GVIZ_URL + Date.now());
+    const text_ = await res.text();
+    const jsonStr = text_.substring(text_.indexOf('{'), text_.lastIndexOf('}') + 1);
+    const data = JSON.parse(jsonStr);
+    const rows = (data.table && data.table.rows) || [];
+
+    bids = rows
+      .map(r => {
+        const c = r.c || [];
+        const name = c[2] && c[2].v;
+        const amount = c[4] && c[4].v;
+        return { name, amount };
+      })
+      .filter(b => b.name && b.amount);
+
     dot.classList.remove('loading');
     text.textContent = 'Tersinkron · data live';
   }catch(e){
